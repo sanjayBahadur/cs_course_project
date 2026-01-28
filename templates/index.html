@@ -18,14 +18,82 @@
             <button type="submit">Add to Data Structure</button>
         </form>
     </div>
+    <div style="background:#e9f5ff;padding:15px;margin-top:15px;border-radius:6px;">
+        <h3>Search Contacts</h3>
+        <input id="search-input" type="search" placeholder="Start typing a name or email" style="width:100%;padding:8px;margin-top:8px;border:1px solid #ccc;border-radius:4px;">
+        <p id="search-feedback" style="margin-top:8px;color:#555;display:none;"></p>
+    </div>
     <hr>
     <h3>Current Contacts (In-Memory)</h3>
+    <div id="contacts-container">
     {% for contact in contacts %}
         <div class="card">
             <strong>{{ contact.name }}</strong> - {{ contact.email }}
         </div>
     {% else %}
-        <p>No contacts found.</p>
+        <div class="card">
+            <em>No contacts found.</em>
+        </div>
     {% endfor %}
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search-input');
+            const contactsContainer = document.getElementById('contacts-container');
+            const feedback = document.getElementById('search-feedback');
+            let debounce;
+
+            const renderContacts = (items, query = '') => {
+                if (!items.length) {
+                    const message = query ? `No contacts match "${query}".` : 'No contacts match your search yet.';
+                    contactsContainer.innerHTML = `
+                        <div class="card">
+                            <em>${message}</em>
+                        </div>
+                    `;
+                    return;
+                }
+
+                contactsContainer.innerHTML = items.map(item => `
+                    <div class="card">
+                        <strong>${item.name}</strong> - ${item.email}
+                    </div>
+                `).join('');
+            };
+
+            const handleSearch = () => {
+                const query = searchInput.value.trim();
+
+                fetch(`/search?q=${encodeURIComponent(query)}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        renderContacts(data.results, query);
+                        if (query && !data.results.length) {
+                            feedback.textContent = `No matches found for "${query}".`;
+                            feedback.style.display = 'block';
+                        } else if (!query && !data.results.length) {
+                            feedback.textContent = 'No contacts available yet.';
+                            feedback.style.display = 'block';
+                        } else {
+                            feedback.style.display = 'none';
+                        }
+                    })
+                    .catch(() => {
+                        feedback.textContent = 'Unable to reach the search service.';
+                        feedback.style.display = 'block';
+                    });
+            };
+
+            searchInput.addEventListener('input', () => {
+                clearTimeout(debounce);
+                debounce = setTimeout(handleSearch, 120);
+            });
+        });
+    </script>
 </body>
 </html>
