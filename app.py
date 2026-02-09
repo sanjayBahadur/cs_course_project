@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
+from urllib.parse import unquote
 import os
 
 app = Flask(__name__)
@@ -6,6 +7,7 @@ app = Flask(__name__)
 app.config['FLASK_TITLE'] = ""
 
 # --- LINKED LIST IMPLEMENTATION ---
+
 class Node:
     """Node class for linked list with value and pointer pair"""
     def __init__(self, data):
@@ -47,6 +49,26 @@ class LinkedList:
             contacts_list.append(current.data)
             current = current.next
         return contacts_list
+    
+    def delete(self, email):
+        """Delete a contact by email"""
+        if not self.head:
+            return False
+        
+        # Check if head node matches
+        if self.head.data['email'] == email:
+            self.head = self.head.next
+            return True
+        
+        # Search for the node to delete
+        current = self.head
+        while current.next:
+            if current.next.data['email'] == email:
+                current.next = current.next.next
+                return True
+            current = current.next
+        
+        return False
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
 # Phase 2: Linked List implementation to store contacts
@@ -97,6 +119,15 @@ def search_contacts():
         filtered = contacts.get_all()
 
     return jsonify(results=filtered)
+
+@app.route('/delete/<path:email>', methods=['POST'])
+def delete_contact(email):
+    """
+    Endpoint to delete a contact by email.
+    """
+    decoded_email = unquote(email)
+    success = contacts.delete(decoded_email)
+    return redirect(url_for('index'))
 
 # --- DATABASE CONNECTIVITY (For later phases) ---
 # Placeholders for students to fill in during Sessions 5 and 27

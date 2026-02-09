@@ -29,8 +29,13 @@
     <h3>Current Contacts (In-Memory)</h3>
     <div id="contacts-container">
     {% for contact in contacts %}
-        <div class="card">
-            <strong>{{ contact.name }}</strong> - {{ contact.email }}
+        <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong>{{ contact.name }}</strong> - {{ contact.email }}
+            </div>
+            <form action="/delete/{{ contact.email | urlencode }}" method="POST" style="margin: 0;" onsubmit="return confirm('Are you sure you want to delete this contact?');">
+                <button type="submit" style="background-color: #ff4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px;">Delete</button>
+            </form>
         </div>
     {% else %}
         <div class="card">
@@ -57,8 +62,13 @@
                 }
 
                 contactsContainer.innerHTML = items.map(item => `
-                    <div class="card">
-                        <strong>${item.name}</strong> - ${item.email}
+                    <div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${item.name}</strong> - ${item.email}
+                        </div>
+                        <form action="/delete/${encodeURIComponent(item.email)}" method="POST" style="margin: 0;" onsubmit="return confirm('Are you sure you want to delete this contact?');">
+                            <button type="submit" style="background-color: #ff4444; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px;">Delete</button>
+                        </form>
                     </div>
                 `).join('');
             };
