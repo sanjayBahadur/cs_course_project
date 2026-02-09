@@ -6,6 +6,39 @@ app = Flask(__name__)
 
 app.config['FLASK_TITLE'] = ""
 
+# --- STACK IMPLEMENTATION FOR UNDO FUNCTIONALITY ---
+
+class Stack:
+    """Stack implementation for storing action history"""
+    def __init__(self):
+        self.items = []
+    
+    def push(self, item):
+        """Push an item onto the stack"""
+        self.items.append(item)
+    
+    def pop(self):
+        """Pop an item from the stack"""
+        if not self.is_empty():
+            return self.items.pop()
+        return None
+    
+    def is_empty(self):
+        """Check if the stack is empty"""
+        return len(self.items) == 0
+    
+    def peek(self):
+        """View the top item without removing it"""
+        if not self.is_empty():
+            return self.items[-1]
+        return None
+
+class Action:
+    """Represents an action (add or delete) for undo functionality"""
+    def __init__(self, action_type, contact_data):
+        self.action_type = action_type  # 'ADD' or 'DELETE'
+        self.contact_data = contact_data.copy() if isinstance(contact_data, dict) else contact_data
+
 # --- LINKED LIST IMPLEMENTATION ---
 
 class Node:
@@ -51,28 +84,33 @@ class LinkedList:
         return contacts_list
     
     def delete(self, email):
-        """Delete a contact by email"""
+        """Delete a contact by email and return the deleted contact"""
         if not self.head:
-            return False
+            return None
         
         # Check if head node matches
         if self.head.data['email'] == email:
+            deleted_contact = self.head.data.copy()
             self.head = self.head.next
-            return True
+            return deleted_contact
         
         # Search for the node to delete
         current = self.head
         while current.next:
             if current.next.data['email'] == email:
+                deleted_contact = current.next.data.copy()
                 current.next = current.next.next
-                return True
+                return deleted_contact
             current = current.next
         
-        return False
+        return None
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
 # Phase 2: Linked List implementation to store contacts
 contacts = LinkedList()
+
+# Action history stack for undo functionality
+action_history = Stack()
 
 # Initialize with default contacts
 contacts.append({'name': 'Ada Lovelace', 'email': 'ada@analysis.example'})
@@ -86,7 +124,8 @@ def index():
     """
     Displays the main page.
     Students will pass their Linked List data here.
-    """
+    """,
+    can_undo=not action_history.is_empty()
     return render_template('index.html', 
                          contacts=contacts.get_all(), 
                          title=app.config['FLASK_TITLE'])
@@ -99,9 +138,12 @@ def add_contact():
     """
     name = request.form.get('name')
     email = request.form.get('email')
-    
+    contact_data = {'name': name, 'email': email}
     # Add to linked list
-    contacts.append({'name': name, 'email': email})
+    contacts.append(contact_data)
+    
+    # Record the action in the stack
+    action_history.push(Action('ADD', contact_data))
     
     return redirect(url_for('index'))
 
@@ -126,7 +168,31 @@ def delete_contact(email):
     Endpoint to delete a contact by email.
     """
     decoded_email = unquote(email)
-    success = contacts.delete(decoded_email)
+    deleted_contact = contacts.delete(decoded_email)
+    
+    # Record the action in the stack if deletion was successful
+    if deleted_contact:
+        action_history.push(Action('DELETE', deleted_contact))
+    
+    return redirect(url_for('index'))
+
+@app.route('/undo', methods=['POST'])
+def undo():
+    """
+    Endpoint to undo the last action.
+    If the last action was an ADD, it deletes the contact.
+    If the last action was a DELETE, it re-adds the contact.
+    """
+    if not action_history.is_empty():
+        last_action = action_history.pop()
+        
+        if last_action.action_type == 'ADD':
+            # Undo an ADD by deleting the contact
+            contacts.delete(last_action.contact_data['email'])
+        elif last_action.action_type == 'DELETE':
+            # Undo a DELETE by re-adding the contact
+            contacts.append(last_action.contact_data)
+    
     return redirect(url_for('index'))
 
 # --- DATABASE CONNECTIVITY (For later phases) ---

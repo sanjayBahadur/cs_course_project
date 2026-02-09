@@ -12,6 +12,12 @@
 <body>
     <h1>{{ title }}Contact Manager</h1>
     
+    <div style="margin-bottom: 15px;">
+        <form action="/undo" method="POST" style="display: inline;">
+            <button type="submit" style="background-color: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;">↶ Undo</button>
+        </form>
+    </div>
+    
     <div style="background-color: #f0f0f0; padding: 15px;">
         <h3>Add New Contact</h3>
         <form action="/add" method="POST">
