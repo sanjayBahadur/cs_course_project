@@ -5,18 +5,57 @@ app = Flask(__name__)
 
 app.config['FLASK_TITLE'] = ""
 
-#to-do
-#implement a node class that has a value and a pointer pair (basically a linked list implementation )
-class node:
+# --- LINKED LIST IMPLEMENTATION ---
+class Node:
+    """Node class for linked list with value and pointer pair"""
+    def __init__(self, data):
+        self.data = data
+        self.next = None
 
+class LinkedList:
+    """Linked list implementation for storing contacts"""
+    def __init__(self):
+        self.head = None
+    
+    def append(self, data):
+        """Add a contact to the end of the linked list"""
+        new_node = Node(data)
+        if not self.head:
+            self.head = new_node
+            return
+        current = self.head
+        while current.next:
+            current = current.next
+        current.next = new_node
+    
+    def search(self, query):
+        """Search for contacts matching the query"""
+        results = []
+        current = self.head
+        while current:
+            contact = current.data
+            if query in contact['name'].lower() or query in contact['email'].lower():
+                results.append(contact)
+            current = current.next
+        return results
+    
+    def get_all(self):
+        """Return all contacts as a list"""
+        contacts_list = []
+        current = self.head
+        while current:
+            contacts_list.append(current.data)
+            current = current.next
+        return contacts_list
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
-# Phase 1: A simple Python List to store contacts
-contacts = [
-    {'name': 'Ada Lovelace', 'email': 'ada@analysis.example'},
-    {'name': 'Grace Hopper', 'email': 'grace@navy.example'},
-    {'name': 'Alan Turing', 'email': 'alan@bombe.example'},
-]
+# Phase 2: Linked List implementation to store contacts
+contacts = LinkedList()
+
+# Initialize with default contacts
+contacts.append({'name': 'Ada Lovelace', 'email': 'ada@analysis.example'})
+contacts.append({'name': 'Grace Hopper', 'email': 'grace@navy.example'})
+contacts.append({'name': 'Alan Turing', 'email': 'alan@bombe.example'})
 
 # --- ROUTES ---
 
@@ -24,22 +63,22 @@ contacts = [
 def index():
     """
     Displays the main page.
-    Eventually, students will pass their Linked List or Tree data here.
+    Students will pass their Linked List data here.
     """
     return render_template('index.html', 
-                         contacts=contacts, 
+                         contacts=contacts.get_all(), 
                          title=app.config['FLASK_TITLE'])
 
 @app.route('/add', methods=['POST'])
 def add_contact():
     """
     Endpoint to add a new contact.
-    Students will update this to insert into their Data Structure.
+    Now inserts into the linked list data structure.
     """
     name = request.form.get('name')
     email = request.form.get('email')
     
-    # Phase 1 Logic: Append to list
+    # Add to linked list
     contacts.append({'name': name, 'email': email})
     
     return redirect(url_for('index'))
@@ -48,16 +87,14 @@ def add_contact():
 def search_contacts():
     """
     Returns contacts that match the provided query in name or email.
+    Now searches through the linked list data structure.
     """
     query = request.args.get('q', '').strip().lower()
 
     if query:
-        filtered = [
-            contact for contact in contacts
-            if query in contact['name'].lower() or query in contact['email'].lower()
-        ]
+        filtered = contacts.search(query)
     else:
-        filtered = contacts
+        filtered = contacts.get_all()
 
     return jsonify(results=filtered)
 
