@@ -33,6 +33,37 @@ class Stack:
             return self.items[-1]
         return None
 
+# --- QUEUE IMPLEMENTATION FOR REDO FUNCTIONALITY ---
+
+class Queue:
+    """Queue implementation for storing redo actions (FIFO)"""
+    def __init__(self):
+        self.items = []
+    
+    def enqueue(self, item):
+        """Add an item to the queue"""
+        self.items.append(item)
+    
+    def dequeue(self):
+        """Remove and return the first item from the queue"""
+        if not self.is_empty():
+            return self.items.pop(0)
+        return None
+    
+    def is_empty(self):
+        """Check if the queue is empty"""
+        return len(self.items) == 0
+    
+    def peek(self):
+        """View the first item without removing it"""
+        if not self.is_empty():
+            return self.items[0]
+        return None
+    
+    def clear(self):
+        """Clear all items from the queue"""
+        self.items = []
+
 class Action:
     """Represents an action (add or delete) for undo functionality"""
     def __init__(self, action_type, contact_data):
@@ -112,6 +143,9 @@ contacts = LinkedList()
 # Action history stack for undo functionality
 action_history = Stack()
 
+# Redo queue for storing undone actions (FIFO)
+redo_queue = Queue()
+
 # Initialize with default contacts
 contacts.append({'name': 'Ada Lovelace', 'email': 'ada@analysis.example'})
 contacts.append({'name': 'Grace Hopper', 'email': 'grace@navy.example'})
@@ -124,11 +158,12 @@ def index():
     """
     Displays the main page.
     Students will pass their Linked List data here.
-    """,
-    can_undo=not action_history.is_empty()
+    """
     return render_template('index.html', 
                          contacts=contacts.get_all(), 
-                         title=app.config['FLASK_TITLE'])
+                         title=app.config['FLASK_TITLE'],
+                         can_undo=not action_history.is_empty(),
+                         can_redo=not redo_queue.is_empty())
 
 @app.route('/add', methods=['POST'])
 def add_contact():
@@ -144,6 +179,9 @@ def add_contact():
     
     # Record the action in the stack
     action_history.push(Action('ADD', contact_data))
+    
+    # Clear redo queue when a new action is performed
+    redo_queue.clear()
     
     return redirect(url_for('index'))
 
@@ -171,6 +209,9 @@ def delete_contact(email):
     deleted_contact = contacts.delete(decoded_email)
     
     # Record the action in the stack if deletion was successful
+    # Clear redo queue when a new action is performed
+    redo_queue.clear()
+    
     if deleted_contact:
         action_history.push(Action('DELETE', deleted_contact))
     
@@ -186,12 +227,37 @@ def undo():
     if not action_history.is_empty():
         last_action = action_history.pop()
         
+        # Push the undone action to the redo queue
+        redo_queue.enqueue(last_action)
+        
         if last_action.action_type == 'ADD':
             # Undo an ADD by deleting the contact
             contacts.delete(last_action.contact_data['email'])
         elif last_action.action_type == 'DELETE':
             # Undo a DELETE by re-adding the contact
             contacts.append(last_action.contact_data)
+    
+    return redirect(url_for('index'))
+
+@app.route('/redo', methods=['POST'])
+def redo():
+    """
+    Endpoint to redo the last undone action.
+    If the last undone action was an ADD, it re-adds the contact.
+    If the last undone action was a DELETE, it deletes the contact again.
+    """
+    if not redo_queue.is_empty():
+        action_to_redo = redo_queue.dequeue()
+        
+        # Push the action back to the undo stack
+        action_history.push(action_to_redo)
+        
+        if action_to_redo.action_type == 'ADD':
+            # Redo an ADD by re-adding the contact
+            contacts.append(action_to_redo.contact_data)
+        elif action_to_redo.action_type == 'DELETE':
+            # Redo a DELETE by deleting the contact again
+            contacts.delete(action_to_redo.contact_data['email'])
     
     return redirect(url_for('index'))
 
