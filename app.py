@@ -70,75 +70,81 @@ class Action:
         self.action_type = action_type  # 'ADD' or 'DELETE'
         self.contact_data = contact_data.copy() if isinstance(contact_data, dict) else contact_data
 
-# --- LINKED LIST IMPLEMENTATION ---
+# --- CONTACT STORE (hash table) IMPLEMENTATION ---
 
-class Node:
-    """Node class for linked list with value and pointer pair"""
-    def __init__(self, data):
-        self.data = data
-        self.next = None
+class ContactStore:
+    """Dictionary-backed contact store for O(1) email lookups.
 
-class LinkedList:
-    """Linked list implementation for storing contacts"""
+    Maintains:
+      - self.data: email -> contact dict
+      - self.name_index: lowercase name -> set(emails)
+    """
     def __init__(self):
-        self.head = None
+        self.data = {}
+        self.name_index = {}
     
-    def append(self, data):
-        """Add a contact to the end of the linked list"""
-        new_node = Node(data)
-        if not self.head:
-            self.head = new_node
-            return
-        current = self.head
-        while current.next:
-            current = current.next
-        current.next = new_node
+    def append(self, contact):
+        """Add or replace a contact by email"""
+        email = contact['email']
+        name_l = contact['name'].lower()
+        # If replacing existing, remove old index
+        old = self.data.get(email)
+        if old:
+            old_name = old['name'].lower()
+            if old_name in self.name_index:
+                self.name_index[old_name].discard(email)
+                if not self.name_index[old_name]:
+                    del self.name_index[old_name]
+
+        self.data[email] = contact.copy()
+        self.name_index.setdefault(name_l, set()).add(email)
     
     def search(self, query):
-        """Search for contacts matching the query"""
+        """Search for contacts.
+
+        Optimized paths:
+          - exact email lookup (contains '@') -> O(1)
+          - exact name match -> O(k) where k is matches
+        Falls back to substring scan if needed.
+        """
+        q = query.strip().lower()
+        if not q:
+            return list(self.data.values())
+
+        # exact email
+        if '@' in q and q in self.data:
+            return [self.data[q]]
+
+        # exact name match
+        if q in self.name_index:
+            return [self.data[e] for e in self.name_index[q]]
+
+        # fallback substring scan
         results = []
-        current = self.head
-        while current:
-            contact = current.data
-            if query in contact['name'].lower() or query in contact['email'].lower():
-                results.append(contact)
-            current = current.next
+        for c in self.data.values():
+            if q in c['name'].lower() or q in c['email'].lower():
+                results.append(c)
         return results
     
     def get_all(self):
         """Return all contacts as a list"""
-        contacts_list = []
-        current = self.head
-        while current:
-            contacts_list.append(current.data)
-            current = current.next
-        return contacts_list
+        return list(self.data.values())
     
     def delete(self, email):
         """Delete a contact by email and return the deleted contact"""
-        if not self.head:
+        contact = self.data.pop(email, None)
+        if not contact:
             return None
-        
-        # Check if head node matches
-        if self.head.data['email'] == email:
-            deleted_contact = self.head.data.copy()
-            self.head = self.head.next
-            return deleted_contact
-        
-        # Search for the node to delete
-        current = self.head
-        while current.next:
-            if current.next.data['email'] == email:
-                deleted_contact = current.next.data.copy()
-                current.next = current.next.next
-                return deleted_contact
-            current = current.next
-        
-        return None
+        name_l = contact['name'].lower()
+        if name_l in self.name_index:
+            self.name_index[name_l].discard(email)
+            if not self.name_index[name_l]:
+                del self.name_index[name_l]
+        return contact.copy()
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
-# Phase 2: Linked List implementation to store contacts
-contacts = LinkedList()
+# Phase 2: ContactStore (dictionary) implementation to store contacts
+contacts = ContactStore()
 
 # Action history stack for undo functionality
 action_history = Stack()

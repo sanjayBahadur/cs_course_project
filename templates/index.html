@@ -31,7 +31,10 @@
     </div>
     <div style="background:#e9f5ff;padding:15px;margin-top:15px;border-radius:6px;">
         <h3>Search Contacts</h3>
-        <input id="search-input" type="search" placeholder="Start typing a name or email" style="width:100%;padding:8px;margin-top:8px;border:1px solid #ccc;border-radius:4px;">
+        <div style="display:flex; gap:8px; margin-top:8px;">
+            <input id="search-input" type="search" placeholder="Enter name or email" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:4px;">
+            <button id="search-btn" type="button" style="padding:8px 12px;border-radius:4px;border:none;background:#0077cc;color:#fff;cursor:pointer;">Search</button>
+        </div>
         <p id="search-feedback" style="margin-top:8px;color:#555;display:none;"></p>
     </div>
     <hr>
@@ -55,13 +58,13 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const searchInput = document.getElementById('search-input');
+            const searchBtn = document.getElementById('search-btn');
             const contactsContainer = document.getElementById('contacts-container');
             const feedback = document.getElementById('search-feedback');
-            let debounce;
 
             const renderContacts = (items, query = '') => {
                 if (!items.length) {
-                    const message = query ? `No contacts match "${query}".` : 'No contacts match your search yet.';
+                    const message = query ? `No contacts match "${query}".` : 'No contacts found.';
                     contactsContainer.innerHTML = `
                         <div class="card">
                             <em>${message}</em>
@@ -87,9 +90,7 @@
 
                 fetch(`/search?q=${encodeURIComponent(query)}`)
                     .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
+                        if (!response.ok) throw new Error('Network response was not ok');
                         return response.json();
                     })
                     .then(data => {
@@ -110,9 +111,12 @@
                     });
             };
 
-            searchInput.addEventListener('input', () => {
-                clearTimeout(debounce);
-                debounce = setTimeout(handleSearch, 120);
+            searchBtn.addEventListener('click', handleSearch);
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSearch();
+                }
             });
         });
     </script>
