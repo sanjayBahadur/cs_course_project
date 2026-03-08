@@ -6,141 +6,10 @@ app = Flask(__name__)
 
 app.config['FLASK_TITLE'] = ""
 
-# --- STACK IMPLEMENTATION FOR UNDO FUNCTIONALITY ---
-
-class Stack:
-    """Stack implementation for storing action history"""
-    def __init__(self):
-        self.items = []
-    
-    def push(self, item):
-        """Push an item onto the stack"""
-        self.items.append(item)
-    
-    def pop(self):
-        """Pop an item from the stack"""
-        if not self.is_empty():
-            return self.items.pop()
-        return None
-    
-    def is_empty(self):
-        """Check if the stack is empty"""
-        return len(self.items) == 0
-    
-    def peek(self):
-        """View the top item without removing it"""
-        if not self.is_empty():
-            return self.items[-1]
-        return None
-
-# --- QUEUE IMPLEMENTATION FOR REDO FUNCTIONALITY ---
-
-class Queue:
-    """Queue implementation for storing redo actions (FIFO)"""
-    def __init__(self):
-        self.items = []
-    
-    def enqueue(self, item):
-        """Add an item to the queue"""
-        self.items.append(item)
-    
-    def dequeue(self):
-        """Remove and return the first item from the queue"""
-        if not self.is_empty():
-            return self.items.pop(0)
-        return None
-    
-    def is_empty(self):
-        """Check if the queue is empty"""
-        return len(self.items) == 0
-    
-    def peek(self):
-        """View the first item without removing it"""
-        if not self.is_empty():
-            return self.items[0]
-        return None
-    
-    def clear(self):
-        """Clear all items from the queue"""
-        self.items = []
-
-class Action:
-    """Represents an action (add or delete) for undo functionality"""
-    def __init__(self, action_type, contact_data):
-        self.action_type = action_type  # 'ADD' or 'DELETE'
-        self.contact_data = contact_data.copy() if isinstance(contact_data, dict) else contact_data
-
-# --- CONTACT STORE (hash table) IMPLEMENTATION ---
-
-class ContactStore:
-    """Dictionary-backed contact store for O(1) email lookups.
-
-    Maintains:
-      - self.data: email -> contact dict
-      - self.name_index: lowercase name -> set(emails)
-    """
-    def __init__(self):
-        self.data = {}
-        self.name_index = {}
-    
-    def append(self, contact):
-        """Add or replace a contact by email"""
-        email = contact['email']
-        name_l = contact['name'].lower()
-        # If replacing existing, remove old index
-        old = self.data.get(email)
-        if old:
-            old_name = old['name'].lower()
-            if old_name in self.name_index:
-                self.name_index[old_name].discard(email)
-                if not self.name_index[old_name]:
-                    del self.name_index[old_name]
-
-        self.data[email] = contact.copy()
-        self.name_index.setdefault(name_l, set()).add(email)
-    
-    def search(self, query):
-        """Search for contacts.
-
-        Optimized paths:
-          - exact email lookup (contains '@') -> O(1)
-          - exact name match -> O(k) where k is matches
-        Falls back to substring scan if needed.
-        """
-        q = query.strip().lower()
-        if not q:
-            return list(self.data.values())
-
-        # exact email
-        if '@' in q and q in self.data:
-            return [self.data[q]]
-
-        # exact name match
-        if q in self.name_index:
-            return [self.data[e] for e in self.name_index[q]]
-
-        # fallback substring scan
-        results = []
-        for c in self.data.values():
-            if q in c['name'].lower() or q in c['email'].lower():
-                results.append(c)
-        return results
-    
-    def get_all(self):
-        """Return all contacts as a list"""
-        return list(self.data.values())
-    
-    def delete(self, email):
-        """Delete a contact by email and return the deleted contact"""
-        contact = self.data.pop(email, None)
-        if not contact:
-            return None
-        name_l = contact['name'].lower()
-        if name_l in self.name_index:
-            self.name_index[name_l].discard(email)
-            if not self.name_index[name_l]:
-                del self.name_index[name_l]
-        return contact.copy()
+# --- DATA STRUCTURES ---
+# Moved into a dedicated module so the web app remains thin and so
+# we can benchmark sorting + binary searching independently.
+from data_structures import Action, ContactStore, Queue, Stack
 
 # --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
 # Phase 2: ContactStore (dictionary) implementation to store contacts
@@ -165,8 +34,10 @@ def index():
     Displays the main page.
     Students will pass their Linked List data here.
     """
+    # Use the quicksort-backed sorted list for display purposes.
+    # This keeps UI results stable and demonstrates the new sorting path.
     return render_template('index.html', 
-                         contacts=contacts.get_all(), 
+                         contacts=contacts.get_all_sorted('name'), 
                          title=app.config['FLASK_TITLE'],
                          can_undo=not action_history.is_empty(),
                          can_redo=not redo_queue.is_empty())
