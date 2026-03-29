@@ -1,151 +1,189 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 from urllib.parse import unquote
-import os
 
 app = Flask(__name__)
-
 app.config['FLASK_TITLE'] = ""
 
-# --- DATA STRUCTURES ---
-# Moved into a dedicated module so the web app remains thin and so
-# we can benchmark sorting + binary searching independently.
 from data_structures import Action, ContactStore, Queue, Stack
 
-# --- IN-MEMORY DATA STRUCTURES (Students will modify this area) ---
-# Phase 2: ContactStore (dictionary) implementation to store contacts
 contacts = ContactStore()
-
-# Action history stack for undo functionality
 action_history = Stack()
-
-# Redo queue for storing undone actions (FIFO)
 redo_queue = Queue()
 
 # Initialize with default contacts
-contacts.append({'name': 'Ada Lovelace', 'email': 'ada@analysis.example'})
-contacts.append({'name': 'Grace Hopper', 'email': 'grace@navy.example'})
-contacts.append({'name': 'Alan Turing', 'email': 'alan@bombe.example'})
+initial_contacts = [
+    {'name': 'Ada Lovelace', 'email': 'ada@analysis.example', 'category': 'work'},
+    {'name': 'Grace Hopper', 'email': 'grace@navy.example', 'category': 'work'},
+    {'name': 'Alan Turing', 'email': 'alan@bombe.example', 'category': 'family'},
+    {'name': 'Eve Newton', 'email': 'eve@newton.example', 'category': 'family'},
+    {'name': 'Bob Dylan', 'email': 'bob@music.example', 'category': 'friends'},
+    {'name': 'Carol Singer', 'email': 'carol@chorus.example', 'category': 'friends'},
+    {'name': 'Diana Prince', 'email': 'diana@hero.example', 'category': 'emergency contact'},
+    {'name': 'Frank Castle', 'email': 'frank@punisher.example', 'category': 'acquaintances'},
+    {'name': 'Gwen Stacy', 'email': 'gwen@web.example', 'category': 'acquaintances'},
+    {'name': 'Harry Potter', 'email': 'harry@hogwarts.example', 'category': 'work'},
+    {'name': 'Isla Fisher', 'email': 'isla@comedy.example', 'category': 'friends'},
+    {'name': 'James Bond', 'email': 'james@mi6.example', 'category': 'emergency contact'},
+    {'name': 'Karen Page', 'email': 'karen@law.example', 'category': 'family'},
+    {'name': 'Leo Messi', 'email': 'leo@soccer.example', 'category': 'acquaintances'},
+    {'name': 'Mia Wong', 'email': 'mia@design.example', 'category': 'work'},
+    {'name': 'Nadia Comaneci', 'email': 'nadia@gymnastics.example', 'category': 'friends'},
+    {'name': 'Oscar Wilde', 'email': 'oscar@literature.example', 'category': 'acquaintances'},
+    {'name': 'Paula Abdul', 'email': 'paula@dance.example', 'category': 'family'},
+    {'name': 'Quinn Fabray', 'email': 'quinn@glee.example', 'category': 'friends'},
+    {'name': 'Rubi Rocket', 'email': 'rubi@rockets.example', 'category': 'work'},
+]
+for c in initial_contacts:
+    contacts.append(c)
 
-# --- ROUTES ---
 
 @app.route('/')
 def index():
-    """
-    Displays the main page.
-    Students will pass their Linked List data here.
-    """
-    # Use the quicksort-backed sorted list for display purposes.
-    # This keeps UI results stable and demonstrates the new sorting path.
-    return render_template('index.html', 
-                         contacts=contacts.get_all_sorted('name'), 
-                         title=app.config['FLASK_TITLE'],
-                         can_undo=not action_history.is_empty(),
-                         can_redo=not redo_queue.is_empty())
+    sort_by = request.args.get('sort_by', 'priority')
+    sort_order = request.args.get('sort_order', 'asc')
+
+    valid_sort_by = ['name', 'priority']
+    if sort_by not in valid_sort_by:
+        sort_by = 'priority'
+    if sort_order not in ['asc', 'desc']:
+        sort_order = 'asc'
+
+    emergency_contacts = contacts.get_emergency_queue()
+    next_emergency = contacts.peek_emergency_contact()
+    all_contacts = contacts.get_all_sorted('priority')
+    all_contacts = [c for c in all_contacts if c.get('category') != 'emergency contact']
+
+    if sort_by == 'name':
+        all_contacts = sorted(all_contacts, key=lambda c: c.get('name', '').lower())
+    else:
+        all_contacts = sorted(all_contacts, key=lambda c: int(c.get('priority', 100)))
+
+    if sort_order == 'desc':
+        all_contacts.reverse()
+
+    return render_template(
+        'index.html',
+        emergency_contacts=emergency_contacts,
+        next_emergency=next_emergency,
+        contacts=all_contacts,
+        title=app.config['FLASK_TITLE'],
+        can_undo=not action_history.is_empty(),
+        can_redo=not redo_queue.is_empty(),
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
 
 @app.route('/add', methods=['POST'])
 def add_contact():
-    """
-    Endpoint to add a new contact.
-    Now inserts into the linked list data structure.
-    """
     name = request.form.get('name')
     email = request.form.get('email')
-    contact_data = {'name': name, 'email': email}
-    # Add to linked list
+    category = request.form.get('category', 'acquaintances')
+
+    contact_data = {
+        'name': name,
+        'email': email,
+        'category': category,
+    }
+
     contacts.append(contact_data)
-    
-    # Record the action in the stack
     action_history.push(Action('ADD', contact_data))
-    
-    # Clear redo queue when a new action is performed
     redo_queue.clear()
-    
+
     return redirect(url_for('index'))
+
 
 @app.route('/search')
 def search_contacts():
-    """
-    Returns contacts that match the provided query in name or email.
-    Now searches through the linked list data structure.
-    """
     query = request.args.get('q', '').strip().lower()
+    category = request.args.get('category', '').strip().lower()
+    sort_by = request.args.get('sort_by', 'priority')
+    sort_order = request.args.get('sort_order', 'asc')
 
-    if query:
-        filtered = contacts.search(query)
+    valid_sort_keys = ['name', 'priority']
+    sort_key = sort_by if sort_by in valid_sort_keys else 'priority'
+    sort_order = sort_order if sort_order in ['asc', 'desc'] else 'asc'
+
+    if category:
+        filtered = contacts.search_by_category(category)
     else:
         filtered = contacts.get_all()
 
-    return jsonify(results=filtered)
+    if query:
+        filtered = [
+            c for c in filtered
+            if query in c.get('name', '').lower() or query in c.get('email', '').lower()
+        ]
+
+    if category != 'emergency contact':
+        filtered = [c for c in filtered if c.get('category') != 'emergency contact']
+
+    if sort_key == 'name':
+        filtered = sorted(filtered, key=lambda c: c.get('name', '').lower())
+    else:
+        filtered = sorted(filtered, key=lambda c: int(c.get('priority', 100)))
+
+    if sort_order == 'desc':
+        filtered.reverse()
+
+    if not filtered:
+        if category:
+            message = 'Not found in this group. Try looking in a different group.'
+        else:
+            message = 'Contacts not found. Please try a different query.'
+    else:
+        message = ''
+
+    return jsonify(results=filtered, message=message)
+
 
 @app.route('/delete/<path:email>', methods=['POST'])
 def delete_contact(email):
-    """
-    Endpoint to delete a contact by email.
-    """
     decoded_email = unquote(email)
     deleted_contact = contacts.delete(decoded_email)
-    
-    # Record the action in the stack if deletion was successful
-    # Clear redo queue when a new action is performed
     redo_queue.clear()
-    
+
     if deleted_contact:
         action_history.push(Action('DELETE', deleted_contact))
-    
+
     return redirect(url_for('index'))
+
 
 @app.route('/undo', methods=['POST'])
 def undo():
-    """
-    Endpoint to undo the last action.
-    If the last action was an ADD, it deletes the contact.
-    If the last action was a DELETE, it re-adds the contact.
-    """
     if not action_history.is_empty():
         last_action = action_history.pop()
-        
-        # Push the undone action to the redo queue
         redo_queue.enqueue(last_action)
-        
+
         if last_action.action_type == 'ADD':
-            # Undo an ADD by deleting the contact
             contacts.delete(last_action.contact_data['email'])
         elif last_action.action_type == 'DELETE':
-            # Undo a DELETE by re-adding the contact
             contacts.append(last_action.contact_data)
-    
+
     return redirect(url_for('index'))
+
 
 @app.route('/redo', methods=['POST'])
 def redo():
-    """
-    Endpoint to redo the last undone action.
-    If the last undone action was an ADD, it re-adds the contact.
-    If the last undone action was a DELETE, it deletes the contact again.
-    """
     if not redo_queue.is_empty():
         action_to_redo = redo_queue.dequeue()
-        
-        # Push the action back to the undo stack
         action_history.push(action_to_redo)
-        
+
         if action_to_redo.action_type == 'ADD':
-            # Redo an ADD by re-adding the contact
             contacts.append(action_to_redo.contact_data)
         elif action_to_redo.action_type == 'DELETE':
-            # Redo a DELETE by deleting the contact again
             contacts.delete(action_to_redo.contact_data['email'])
-    
+
     return redirect(url_for('index'))
 
-# --- DATABASE CONNECTIVITY (For later phases) ---
-# Placeholders for students to fill in during Sessions 5 and 27
+
 def get_postgres_connection():
     pass
+
 
 def get_mssql_connection():
     pass
 
+
 if __name__ == '__main__':
-    # Run the Flask app on port 5000, accessible externally
     app.run(host='0.0.0.0', port=5000, debug=True)
